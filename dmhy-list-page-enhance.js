@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         动漫花园列表页增强
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  列表页下载种子+批量复制种子/磁链链接
 // @author       菜姬
 // @match        *://dmhy.org/
@@ -17,17 +17,23 @@
 (function () {
     'use strict';
 
-    // Your code here...
-    let changeToTorrentLink = localStorage.changeToTorrentLink === "true";
-    function downloadTorrent(url, filename) {
+    const ensureProtocol = (url) => {
+        if (url.startsWith('//')) {
+            const protocol = window.location.protocol;
+            return protocol + url;
+        }
+        return url;
+    };
+
+    const downloadFile = (url, filename) => {
         GM_xmlhttpRequest({
             method: "get",
             url: url,
             timeout: 5000,
             responseType: "arraybuffer",
             onload: function (r) {
-                let blob = new Blob([r.response], { type: "application/octet-stream" });
-                let anchor = document.createElement("a");
+                const blob = new Blob([r.response], { type: "application/octet-stream" });
+                const anchor = document.createElement("a");
                 anchor.href = URL.createObjectURL(blob);
                 anchor.download = filename;
                 anchor.style.display = "none";
@@ -39,89 +45,86 @@
                 }, 0);
             }
         });
-    }
-    function reflush() {
+    };
+
+    const reflush = () => {
         if (!changeToTorrentLink) {
             document.querySelectorAll('a.arrow-magnet').forEach((item, index, arr) => {
+                item.title = '磁力下載';
                 item.onclick = null;
             });
         }
         else {
             document.querySelectorAll('a.arrow-magnet').forEach((item, index, arr) => {
+                item.title = '下載種子';
                 item.onclick = (e) => {
                     e.preventDefault();
-                    let link = item.parentElement.previousElementSibling.querySelector("td>a");
+                    const link = item.parentElement.previousElementSibling.querySelector("td>a");
                     GM_xmlhttpRequest({
                         method: "get",
                         url: link.href,
                         responseType: "text",
                         onload: function (r) {
-                            let url, filename;
-                            let html = r.response;
-                            let match = html.match(/<a href="(.+?dl\.dmhy\.org\/[^"]+)">(.+?)<\/a>/);
-                            url = match[1];
-                            filename = match[2] + ".torrent";
-                            downloadTorrent(url, filename);
+                            const html = r.response;
+                            const match = html.match(/<a href="(.+?dl\.dmhy\.org\/[^"]+)">(.+?)<\/a>/);
+                            const url = ensureProtocol(match[1]);
+                            const filename = match[2] + ".torrent";
+                            downloadFile(url, filename);
                         }
                     });
                 };
             });
         }
-    }
-    let block = document.querySelector('#topic_list > thead > tr > th:nth-child(4) > span');
-    block.onclick = (e) => {
-        changeToTorrentLink = !changeToTorrentLink;
-        localStorage.changeToTorrentLink = changeToTorrentLink;
-        e.target.textContent = changeToTorrentLink ? "種子" : "磁鏈";
+    };
+
+    let changeToTorrentLink = localStorage.changeToTorrentLink === "true";
+
+    {
+        const row4 = document.querySelector('#topic_list > thead > tr > th:nth-child(4) > span');
+        row4.onclick = (e) => {
+            changeToTorrentLink = !changeToTorrentLink;
+            localStorage.changeToTorrentLink = changeToTorrentLink;
+            e.target.textContent = changeToTorrentLink ? "種子" : "磁鏈";
+            reflush();
+        };
         reflush();
-    };
-    reflush();
-    block.textContent = changeToTorrentLink ? "種子" : "磁鏈";
-    document.querySelector('#topic_list > thead > tr > th:nth-child(6) > span').textContent = "做種";
-    let copyAllButton = document.createElement('a');
-    copyAllButton.href = "javascript:;";
-    copyAllButton.textContent = "複製全部";
-    copyAllButton.onclick = (e) => {
-        let text = [];
-        let count = 0;
-        document.querySelectorAll('a.arrow-magnet').forEach((item, index, arr) => {
-            if (changeToTorrentLink) {
-                let link = item.parentElement.previousElementSibling.querySelector("td>a");
-                GM_xmlhttpRequest({
-                    method: "get",
-                    url: link.href,
-                    timeout: 5000,
-                    responseType: "text",
-                    onload: function (r) {
-                        let html = r.response;
-                        let match = html.match(/<a href="(.+?dl\.dmhy\.org\/[^"]+)">(.+?)<\/a>/);
-                        let url = match[1];
-                        if (url.startsWith('//'))
-                            url = 'https:' + url;
-                        text.push(url);
-                    }
-                });
-            }
-            else {
-                text.push(item.href);
-            }
-            count++;
-        });
-        let timer = setInterval(function () {
-            if (count == text.length) {
-                const textarea = document.createElement('textarea');
-                document.body.appendChild(textarea);
-                textarea.value = text.join('\n');
-                textarea.select();
-                if (document.execCommand('copy')) {
-                    document.execCommand('copy');
-                    alert('複製成功');
+        row4.textContent = changeToTorrentLink ? "種子" : "磁鏈";
+        const row6 = document.querySelector('#topic_list > thead > tr > th:nth-child(6) > span');
+        row6.textContent = "做種";
+    }
+
+    {
+        const copyAllButton = document.createElement('a');
+        copyAllButton.href = "javascript:;";
+        copyAllButton.textContent = "複製全部";
+        copyAllButton.onclick = (e) => {
+            const text = [];
+            document.querySelectorAll('a.arrow-magnet').forEach((item, index, arr) => {
+                if (changeToTorrentLink) {
+                    const link = item.parentElement.previousElementSibling.querySelector("td>a");
+                    GM_xmlhttpRequest({
+                        method: "get",
+                        url: link.href,
+                        timeout: 5000,
+                        responseType: "text",
+                        onload: function (r) {
+                            const html = r.response;
+                            const match = html.match(/<a href="(.+?dl\.dmhy\.org\/[^"]+)">(.+?)<\/a>/);
+                            const url = ensureProtocol(match[1]);
+                            text.push(url);
+                        }
+                    });
                 }
-                document.body.removeChild(textarea);
-                clearInterval(timer);
-                return;
-            }
-        }, 100);
+                else {
+                    text.push(item.href);
+                }
+            });
+            window.navigator.clipboard.writeText(text.join('\n')).then(() => {
+                alert('複製成功');
+            }, (e) => {
+                console.error(e);
+            })
+        };
+        document.querySelector('div.nav_title > div.fr').appendChild(copyAllButton);
     };
-    document.querySelector('div.nav_title > div.fr').appendChild(copyAllButton);
 })();

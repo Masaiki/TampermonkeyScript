@@ -7,7 +7,7 @@
 // @match        *://www.dmhy.org/topics/view/*
 // @match        *://share.dmhy.org/topics/view/*
 // @author       菜姬
-// @version      0.4
+// @version      0.5
 // @namespace    https://greasyfork.org/users/171607
 // @grant        GM_xmlhttpRequest
 // @connect      dmhy.org
@@ -15,9 +15,17 @@
 // @encoding     utf-8
 // ==/UserScript==
 (function () {
-    let urlblock = document.querySelector('#tabs-1 > p:nth-child(1) > a');
-    let url = urlblock.href;
-    let filename = urlblock.textContent + ".torrent";
+    const ensureProtocol = (url) => {
+        if (url.startsWith('//')) {
+            const protocol = window.location.protocol;
+            return protocol + url;
+        }
+        return url;
+    };
+
+    const urlblock = document.querySelector('#tabs-1 > p:nth-child(1) > a');
+    const url = ensureProtocol(urlblock.href);
+    const filename = urlblock.textContent + ".torrent";
     urlblock.onclick = (e) => {
         e.preventDefault();
         GM_xmlhttpRequest({
@@ -25,8 +33,8 @@
             url: url,
             responseType: "arraybuffer",
             onload: function (r) {
-                let blob = new Blob([r.response], { type: "application/octet-stream" });
-                let anchor = document.createElement("a");
+                const blob = new Blob([r.response], { type: "application/octet-stream" });
+                const anchor = document.createElement("a");
                 anchor.href = URL.createObjectURL(blob);
                 anchor.download = filename;
                 anchor.style.display = "none";
